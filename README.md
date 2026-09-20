@@ -60,7 +60,7 @@ be entered in Word instead.
 | File | Purpose |
 |---|---|
 | `office_installer.py` | The installer. One source, four executables. |
-| `build.py` | Builds all three with PyInstaller, optionally code-signs them. |
+| `build.py` | Builds all four with PyInstaller, optionally code-signs them. |
 | `remove.xml` | Removes every Office on the machine, silently. |
 | `install_2016.xml` | Template: ProPlusRetail, Current channel, hu-hu (see above) |
 | `install_2019.xml` | Template: ProPlus2019Volume, PerpetualVL2019, hu-hu |
