@@ -1,0 +1,11 @@
+# Microsoft's Office Deployment Tool. Not our code and not redistributed here:
+# download it from Microsoft and drop setup.exe next to build.py.
+setup.exe
+officedeploymenttool*.exe
+
+# Build artefacts
+dist/
+_work/
+_build_*.py
+*.spec
+__pycache__/

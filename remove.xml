@@ -1,0 +1,10 @@
+<Configuration>
+  <!-- Removes EVERY Office on the machine: Click-to-Run (Microsoft 365, retail
+       Home & Student, LTSC) via Remove All, and the old MSI-based ones via
+       RemoveMSI. The installer's RemoveMSI alone does NOT touch Click-to-Run,
+       which is why a preinstalled 365 trial breaks MAK activation. -->
+  <Remove All="TRUE" />
+  <RemoveMSI />
+  <Display Level="None" AcceptEULA="TRUE" />
+  <Property Name="FORCEAPPSHUTDOWN" Value="TRUE" />
+</Configuration>
