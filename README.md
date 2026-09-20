@@ -1,7 +1,7 @@
 # levIT Office LTSC installer
 
-A single-file Windows installer for **Microsoft Office LTSC 2019 / 2021 / 2024
-Professional Plus**. It wraps Microsoft's own Office Deployment Tool (ODT) in a
+A single-file Windows installer for **Microsoft Office 2016 / 2019 / 2021 / 2024
+Professional Plus** volume (MAK) licences. It wraps Microsoft's own Office Deployment Tool (ODT) in a
 small console program that does the things a customer would otherwise have to
 do by hand, and in the right order:
 
@@ -11,7 +11,9 @@ do by hand, and in the right order:
 3. detects any Office already on the machine and lists it by name
 4. asks for permission, then removes all of it, including preinstalled
    Microsoft 365 trials
-5. installs the chosen Office LTSC edition from Microsoft's CDN
+5. installs the chosen Office edition from Microsoft's CDN
+6. Office 2016 only: prepares the volume licence and offers to enter and
+   activate the product key right away
 
 The installer is built for customers of [levit.hu](https://levit.hu), a
 Hungarian software licence shop, so the on-screen text is Hungarian. The source
@@ -41,13 +43,26 @@ The list of offered applications, and which edition contains each one (Office
 LTSC 2024 no longer ships Publisher), is the `APPS` table at the top of
 `office_installer.py`.
 
+## Office 2016 is different
+
+The Office Deployment Tool has no volume product ID for Office 2016 (the 2016
+volume edition was still MSI-based and is only available from the Volume
+Licensing portal). The 2016 installer therefore installs the **Retail**
+Click-to-Run edition (`ProPlusRetail`) and then uses Office's own `ospp.vbs`
+to install the volume licence files that ship inside every Click-to-Run
+installation (`root\Licenses16\client-issuance-*`, `pkeyconfig-office`,
+`ProPlusVL_MAK*`). After that Office accepts a MAK key. The installer asks
+for the key at the end; leaving it empty skips activation, and the key can
+be entered in Word instead.
+
 ## Repository layout
 
 | File | Purpose |
 |---|---|
-| `office_installer.py` | The installer. One source, three executables. |
+| `office_installer.py` | The installer. One source, four executables. |
 | `build.py` | Builds all three with PyInstaller, optionally code-signs them. |
 | `remove.xml` | Removes every Office on the machine, silently. |
+| `install_2016.xml` | Template: ProPlusRetail, Current channel, hu-hu (see above) |
 | `install_2019.xml` | Template: ProPlus2019Volume, PerpetualVL2019, hu-hu |
 | `install_2021.xml` | Template: ProPlus2021Volume + language pack, PerpetualVL2021, hu-hu |
 | `install_2024.xml` | Template: ProPlus2024Volume, PerpetualVL2024, hu-hu |
@@ -74,6 +89,7 @@ py -3.12-32 build.py
 Output in `dist/`:
 
 ```
+Office_2016_Pro_Plus_LTSC.exe
 Office_2019_Pro_Plus_LTSC.exe
 Office_2021_Pro_Plus_LTSC.exe
 Office_2024_Pro_Plus_LTSC.exe
@@ -84,7 +100,7 @@ Office_2024_Pro_Plus_LTSC.exe
 ## Code signing
 
 If `SIGN_SUBJECT` is set (environment variable, or the constant at the top of
-`build.py`) to the certificate's subject name, `build.py` signs all three
+`build.py`) to the certificate's subject name, `build.py` signs all four
 executables with the Windows SDK `signtool` using SHA-256 and a Certum RFC 3161
 timestamp, then verifies them. A failed signature stops the build; nothing
 unsigned leaves silently. With `SIGN_SUBJECT` empty the step is skipped.

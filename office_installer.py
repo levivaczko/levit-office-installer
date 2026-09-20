@@ -111,15 +111,15 @@ PRODUCT_NAMES = {
 # nincs Publisher, ott nem is kínáljuk fel. Alapból minden be van jelölve,
 # így Enter-Enter ugyanazt adja, mint a régi telepítő.
 APPS = [
-    ("Word",       "Word",                    ("2019", "2021", "2024")),
-    ("Excel",      "Excel",                   ("2019", "2021", "2024")),
-    ("PowerPoint", "PowerPoint",              ("2019", "2021", "2024")),
-    ("Outlook",    "Outlook",                 ("2019", "2021", "2024")),
-    ("OneNote",    "OneNote",                 ("2019", "2021", "2024")),
-    ("Access",     "Access",                  ("2019", "2021", "2024")),
-    ("Publisher",  "Publisher",               ("2019", "2021")),
-    ("Lync",       "Skype Vállalati verzió",  ("2019", "2021", "2024")),
-    ("OneDrive",   "OneDrive",                ("2019", "2021", "2024")),
+    ("Word",       "Word",                    ("2016", "2019", "2021", "2024")),
+    ("Excel",      "Excel",                   ("2016", "2019", "2021", "2024")),
+    ("PowerPoint", "PowerPoint",              ("2016", "2019", "2021", "2024")),
+    ("Outlook",    "Outlook",                 ("2016", "2019", "2021", "2024")),
+    ("OneNote",    "OneNote",                 ("2016", "2019", "2021", "2024")),
+    ("Access",     "Access",                  ("2016", "2019", "2021", "2024")),
+    ("Publisher",  "Publisher",               ("2016", "2019", "2021")),
+    ("Lync",       "Skype Vállalati verzió",  ("2016", "2019", "2021", "2024")),
+    ("OneDrive",   "OneDrive",                ("2016", "2019", "2021", "2024")),
 ]
 
 
@@ -329,6 +329,96 @@ def run_setup(xml_name, what):
         return False
 
 
+# ── Office 2016: Retail → Volume licenc, kulcs megadása ──────────────────────
+
+def office_paths():
+    """Az ospp.vbs és a Licenses16 mappa helye. A 32 bites Office 64 bites
+    Windowson a Program Files (x86) alá kerül, ezért mindkét ágat nézzük."""
+    roots = []
+    for env in ("ProgramFiles", "ProgramW6432", "ProgramFiles(x86)"):
+        base = os.environ.get(env)
+        if base:
+            roots.append(os.path.join(base, "Microsoft Office"))
+    for root in roots:
+        ospp = os.path.join(root, "Office16", "ospp.vbs")
+        lic = os.path.join(root, "root", "Licenses16")
+        if os.path.exists(ospp) and os.path.isdir(lic):
+            return ospp, lic
+    return None, None
+
+
+def ospp(ospp_path, *args):
+    """Egy ospp.vbs hívás; a teljes kimenetet adja vissza, hibát is."""
+    try:
+        proc = subprocess.run(
+            ["cscript", "//nologo", ospp_path, *args],
+            cwd=os.path.dirname(ospp_path), capture_output=True, text=True, errors="replace",
+        )
+        return (proc.stdout or "") + (proc.stderr or "")
+    except Exception as exc:
+        return f"HIBA: {exc}"
+
+
+def convert_2016_to_volume():
+    """A Retail telepítés magában hordozza a volume licencfájlokat is
+    (root\\Licenses16). Beemeljük a kiadói láncot, a kulcskonfigurációt és a
+    ProPlus MAK licenceket; onnantól az Office a MAK kulcsot elfogadja."""
+    ospp_path, lic_dir = office_paths()
+    if not ospp_path:
+        return False
+    names = sorted(os.listdir(lic_dir), key=str.lower)
+    low = {n: n.lower() for n in names}
+    # Sorrend számít: előbb a kiadói lánc, aztán a kulcskonfiguráció, végül a
+    # termék licencei, mert azok az előzőekre hivatkoznak.
+    issuance = [n for n in names if low[n].startswith("client-issuance-")]
+    pkeycfg = [n for n in names if low[n] == "pkeyconfig-office.xrm-ms"]
+    product = [n for n in names if low[n].startswith("proplusvl_mak")]
+    if not product:
+        return False
+    for n in issuance + pkeycfg + product:
+        ospp(ospp_path, f"/inslic:{os.path.join(lic_dir, n)}")
+    return "proplusvl_mak" in ospp(ospp_path, "/dstatusall").lower()
+
+
+def normalize_key(raw):
+    """25 karakteres kulcs kötőjelekkel, vagy None, ha nem annak néz ki."""
+    k = "".join(ch for ch in raw.upper() if ch.isalnum())
+    if len(k) != 25:
+        return None
+    return "-".join(k[i:i + 5] for i in range(0, 25, 5))
+
+
+def ask_key_and_activate():
+    """Ha a vevő kéznél tartja a kulcsot, beírjuk és aktiválunk. Üres Enter
+    kihagyja, akkor a Wordben adja meg később. A kulcsot nem írjuk vissza."""
+    ospp_path, _ = office_paths()
+    if not ospp_path:
+        return None
+    print("  Ha kéznél van az e-mailben kapott 25 karakteres kulcs, add meg most,")
+    print(f"  {c('dim', 'és aktiválom. Ha most nincs, hagyd üresen és nyomj Entert: a Wordben is megadhatod.')}")
+    print()
+    for _attempt in range(3):
+        raw = input("  Kulcs: ").strip()
+        if not raw:
+            return None
+        key = normalize_key(raw)
+        if not key:
+            print(f"  {c('amber', 'Ez nem 25 karakter. Próbáld újra, vagy hagyd üresen.')}")
+            continue
+        out = ospp(ospp_path, f"/inpkey:{key}")
+        if "successful" not in out.lower():
+            print(f"  {c('amber', 'A kulcsot nem fogadta el. Ellenőrizd, hogy pontosan írtad be.')}")
+            continue
+        print(f"  {c('dim', 'Kulcs rendben, aktiválás...')}")
+        out = ospp(ospp_path, "/act")
+        if "successful" in out.lower():
+            return True
+        print(f"  {c('amber', 'A kulcs bekerült, de az online aktiválás most nem sikerült.')}")
+        print(f"  {c('dim', 'Internetkapcsolattal a Word megnyitásakor újra megpróbálja.')}")
+        return False
+    return None
+
+
 def bail(msg):
     print()
     print(f"  {msg}")
@@ -399,6 +489,17 @@ def main():
     if not run_setup(install_xml, "telepítés"):
         bail("A telepítés hibával állt le.")
 
+    activated = None
+    if EDITION == "2016":
+        print(f"  {c('dim', 'Volume licenc előkészítése...')}")
+        if not convert_2016_to_volume():
+            bail("Az Office feltelepült, de a volume licenc előkészítése nem sikerült. "
+                 "Írj nekünk, és segítünk befejezni.")
+        print(f"  {c('green', '✓')} Volume licenc kész.")
+        print()
+        activated = ask_key_and_activate()
+        print()
+
     bar = "─" * W
     print()
     print(f"  {c('green', '┌' + bar + '┐')}")
@@ -406,8 +507,11 @@ def main():
           + " " * max(0, W - len(f"   ✓  Kész! Az Office {EDITION} feltelepült.")) + f"{c('green', '│')}")
     print(f"  {c('green', '└' + bar + '┘')}")
     print()
-    print("  Következő lépés: nyisd meg a Wordöt, és add meg a levIT-től")
-    print("  e-mailben kapott 25 karakteres licenckulcsot.")
+    if activated:
+        print(f"  {c('green', 'Az Office aktiválva.')} Nyisd meg a Wordöt, és használd.")
+    else:
+        print("  Következő lépés: nyisd meg a Wordöt, és add meg a levIT-től")
+        print("  e-mailben kapott 25 karakteres licenckulcsot.")
     print()
     print(f"  {c('dim', 'Köszönjük, hogy a ')}{c('white', 'lev')}{c('red', 'IT')}"
           f"{c('dim', ' ügyfele vagy!')}")

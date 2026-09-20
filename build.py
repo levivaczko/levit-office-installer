@@ -5,7 +5,7 @@ Windowson kell futtatni, mert a PyInstaller nem tud más rendszerre fordítani.
 Előfeltételek ugyanebben a mappában:
   setup.exe          a Microsoft Office Deployment Toolból kicsomagolva
   remove.xml
-  install_2019.xml / install_2021.xml / install_2024.xml
+  install_2016.xml / install_2019.xml / install_2021.xml / install_2024.xml
   office_installer.py
 
 Futtatás:
@@ -13,6 +13,7 @@ Futtatás:
   python build.py
 
 Eredmény a dist/ mappában:
+  Office_2016_Pro_Plus_LTSC.exe
   Office_2019_Pro_Plus_LTSC.exe
   Office_2021_Pro_Plus_LTSC.exe
   Office_2024_Pro_Plus_LTSC.exe
@@ -36,7 +37,7 @@ import subprocess
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-EDITIONS = ["2019", "2021", "2024"]
+EDITIONS = ["2016", "2019", "2021", "2024"]
 
 # A tanúsítvány "Kiadva" (Subject CN) neve, pontosan úgy, ahogy a Certum
 # kiállította. Környezeti változóval felülírható.
