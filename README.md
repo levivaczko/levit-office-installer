@@ -11,8 +11,10 @@ do by hand, and in the right order:
 3. detects any Office already on the machine and lists it by name
 4. asks for permission, then removes all of it, including preinstalled
    Microsoft 365 trials
-5. installs the chosen Office edition from Microsoft's CDN
-6. Office 2016 only: prepares the volume licence and offers to enter and
+5. lists any product keys and KMS server setting left on the machine and asks
+   separately whether to remove those too
+6. installs the chosen Office edition from Microsoft's CDN
+7. Office 2016 only: prepares the volume licence and offers to enter and
    activate the product key right away
 
 The installer is built for customers of [levit.hu](https://levit.hu), a
@@ -31,6 +33,29 @@ A valid MAK key is then rejected with *"the product key is invalid"*.
 Only `<Remove All="TRUE" />` fixes this, and it needs a separate ODT run. That is
 why there are two configurations and two steps.
 
+## Why it asks about the product key separately
+
+An ODT removal deletes the files, **not the licence**: the product key stays in
+the Windows Software Protection Platform store and only `ospp.vbs /unpkey`
+removes it. The visible consequence is that an earlier Office licence makes a
+freshly installed Office report itself as activated, under the old name: the
+Account pane shows `Activated product: Microsoft Office Professional Plus 2016`
+on a 2024 LTSC installation. The 2016/2019/2021/2024 volume licences all belong
+to the same "Office 16" family, which is why they are accepted across
+installations. The customer is then never asked for the key they bought.
+
+The same step surfaces a **KMS server override**
+(`KMS machine registry override defined:` in `/dstatus`), which activator
+scripts write into the registry. While it is there, Office re-activates against
+that server every 180 days instead of using the purchased MAK key, and the
+Account pane shows a `..._KMS_Client edition` licence. On a yes the installer
+clears it with `/remhst` and `/cachst:FALSE`.
+
+The installer reads all of this **before** the removal, while `ospp.vbs` still
+exists, prints what it found, and only acts on an explicit yes: a retail key
+must not be dropped without the owner knowing, because reactivating it needs
+their key card.
+
 ## How the configuration is built
 
 `install_<edition>.xml` is a template. At run time the installer copies it,
@@ -39,9 +64,8 @@ per application the user unticked, then hands the result to `setup.exe
 /configure`. Pressing Enter twice installs the full suite, 64-bit, which is
 exactly what the template says.
 
-The list of offered applications, and which edition contains each one (Office
-LTSC 2024 no longer ships Publisher), is the `APPS` table at the top of
-`office_installer.py`.
+The list of offered applications, and which edition each one is offered for,
+is the `APPS` table at the top of `office_installer.py`.
 
 ## Office 2016 is different
 

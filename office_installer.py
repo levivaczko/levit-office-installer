@@ -10,10 +10,11 @@ Menete:
      és hogy 32 vagy 64 bites Office legyen
   3. megnézi, van-e Office a gépen
   4. ha van, kiírja mit talált, és rákérdez, eltávolíthatja-e
-  5. eltávolít mindent (Microsoft 365 próbaverziót is)
-  6. felteszi a megvásárolt LTSC változatot a kijelölés szerint
+  5. megkérdezi, törölje-e a gépen maradt Office licenckulcsokat is
+  6. eltávolít mindent (Microsoft 365 próbaverziót is)
+  7. felteszi a megvásárolt LTSC változatot a kijelölés szerint
 
-Ha nincs mit eltávolítani, a 4-5. lépés kimarad. Enter-Enter a 2. lépésben
+Ha nincs mit eltávolítani, a 4-6. lépés kimarad. Enter-Enter a 2. lépésben
 a teljes csomagot adja, 64 bitesen, ahogy a bundled XML írja.
 
 Fordítás: lásd README.md. Az EDITION értéket a build script írja át.
@@ -359,6 +360,53 @@ def ospp(ospp_path, *args):
         return f"HIBA: {exc}"
 
 
+def license_state():
+    """A gépen lévő Office licencállapot: (kulcsok, kms_host).
+
+    kulcsok: [(termeknev, kulcs_utolso_5)] az ospp.vbs /dstatus kimenetéből;
+    csak azok, amikhez tartozik telepített kulcs, mert csak azt lehet törölni.
+    kms_host: a beállított KMS-kiszolgáló neve, ha van. Ezt aktivátor
+    szkriptek szokták beírni, és amíg ott van, az Office 180 naponta
+    újraaktiválja magát azon a gépen a MAK kulcs helyett."""
+    ospp_path, _ = office_paths()
+    if not ospp_path:
+        return [], ""
+    out = ospp(ospp_path, "/dstatus")
+    found, name, kms_host = [], "", ""
+    for line in out.splitlines():
+        line = line.strip()
+        low = line.lower()
+        if low.startswith("license name:"):
+            name = line.split(":", 1)[1].strip()
+        elif "installed product key" in low:
+            key = line.rsplit(":", 1)[1].strip()
+            if key and (name, key) not in found:
+                found.append((name, key))
+        elif "registry override defined" in low:
+            kms_host = line.rsplit(":", 1)[1].strip()
+    return found, kms_host
+
+
+def remove_license_keys(keys, kms_host=""):
+    """Kulcsok törlése a Windows licenctárából, és a KMS-kiszolgáló
+    beállításának kivétele. A visszatérés a ténylegesen törölt kulcsok száma;
+    ami nem sikerül, azt nem hallgatjuk el."""
+    ospp_path, _ = office_paths()
+    if not ospp_path:
+        return 0
+    removed = 0
+    for name, key in keys:
+        out = ospp(ospp_path, f"/unpkey:{key}")
+        if "successful" in out.lower():
+            removed += 1
+        else:
+            print(f"  {c('amber', 'Nem sikerult torolni:')} {name} ({key})")
+    if kms_host:
+        ospp(ospp_path, "/remhst")          # KMS-kiszolgáló és port törlése
+        ospp(ospp_path, "/cachst:FALSE")    # a gyorsítótárazott kiszolgáló is
+    return removed
+
+
 def convert_2016_to_volume():
     """A Retail telepítés magában hordozza a volume licencfájlokat is
     (root\\Licenses16). Beemeljük a kiadói láncot, a kulcskonfigurációt és a
@@ -469,6 +517,28 @@ def main():
             print()
             input("  Nyomj Entert a bezáráshoz...")
             sys.exit(0)
+
+        # A kulcsokat még az eltávolítás ELŐTT kell kiolvasni és törölni,
+        # mert az ospp.vbs az Office-szal együtt tűnik el.
+        keys, kms_host = license_state()
+        if keys or kms_host:
+            print()
+            print(f"  {c('amber', 'A gépen licenckulcs is van:')}")
+            for name, key in keys:
+                print(f"     {c('dim', '•')} {name} {c('dim', '(' + key + ')')}")
+            if kms_host:
+                print(f"     {c('dim', '•')} KMS-kiszolgáló beállítva: {kms_host}")
+            print()
+            print("  Ha ez marad, az új Office ezt a régi licencet fogja mutatni,")
+            print("  és nem kéri majd a megvásárolt kulcsodat.")
+            print()
+            ans = input("  Töröljem a régi kulcsokat is? (I/N): ")
+            if ans.strip().lower() in ("i", "igen", "y", "yes"):
+                n = remove_license_keys(keys, kms_host)
+                print(f"  {c('green', '✓')} {n} kulcs törölve."
+                      + (" A KMS-beállítás is." if kms_host else ""))
+            else:
+                print(f"  {c('dim', 'Rendben, a régi kulcsok a gépen maradnak.')}")
 
         print()
         print("  Eltávolítás folyamatban, ez pár percig tarthat.")
